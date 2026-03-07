@@ -1,5 +1,6 @@
 package com.example.myrpc.rpc.consumer;
 
+import com.example.myrpc.rpc.api.IAdd;
 import com.example.myrpc.rpc.codec.MessageDecoder;
 import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.codec.RequestMessageEncoder;
@@ -15,9 +16,10 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 
 import java.util.concurrent.CompletableFuture;
 
-public class Consumer {
+public class Consumer implements IAdd {
 
-    public void add(int a, int b) throws InterruptedException {
+    @Override
+    public int add(int a, int b) {
         // 异步容器，放provider的返回值
         CompletableFuture<Integer> resultFuture = new CompletableFuture<>();
 
@@ -42,17 +44,23 @@ public class Consumer {
                 });
 
         // 连接Provider
-        ChannelFuture syncFuture = bootstrap.connect("localhost", 9999).sync();
+        ChannelFuture syncFuture = null;
+        try {
+            syncFuture = bootstrap.connect("localhost", 9999).sync();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         // 发起请求
         Request request = new Request();
-        request.setServiceName("service");
-        request.setMethodName("method");
-        request.setParamTypes(new String[]{"int", "int"});
-        request.setParams(new Object[]{1, 2});
+        request.setServiceName(IAdd.class.getName());
+        request.setMethodName("add");
+        request.setParamTypes(new Class[]{int.class, int.class});
+        request.setParams(new Object[]{a, b});
         syncFuture.channel().writeAndFlush(request);
         // 等待获取Provider结果
         Integer result = resultFuture.join();
         System.out.println("成功获取Provider结果：" + result);
+        return result;
     }
 
 

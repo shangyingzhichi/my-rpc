@@ -14,12 +14,19 @@ public class ProviderServer {
 
     private final int port;
 
+    private final ServiceRegistry serviceRegistry;
+
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
 
 
     public ProviderServer(int port) {
         this.port = port;
+        serviceRegistry = new ServiceRegistry();
+    }
+
+    public <I> void registerService(Class<I> interfaceClass, I instance) {
+        serviceRegistry.register(interfaceClass, instance);
     }
 
 
@@ -43,9 +50,14 @@ public class ProviderServer {
                                             // 接收请求
                                             System.out.println("Server received: " + request);
 
+                                            // 1. 获取服务
+                                            ServiceRegistry.ServiceInstanceWrapper service = serviceRegistry.findService(request.getServiceName());
+                                            // 2. 调用方法
+                                            Object result = service.invoke(request.getMethodName(), request.getParamTypes(), request.getParams());
+
                                             // 返回响应
                                             Response response = new Response();
-                                            response.setResult(add(1, 2));
+                                            response.setResult(result);
                                             channelHandlerContext.writeAndFlush(response);
                                         }
                                     });
@@ -75,13 +87,5 @@ public class ProviderServer {
 
 
 
-    public static int add(int a, int b) {
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        return a + b;
-    }
 
 }

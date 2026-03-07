@@ -1,6 +1,7 @@
 package com.example.myrpc.rpc.codec;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONReader;
 import com.example.myrpc.rpc.message.Message;
 import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.message.Response;
@@ -55,7 +56,8 @@ public class MessageDecoder extends LengthFieldBasedFrameDecoder {
 
     public Request deSerializeRequest(byte[] body) {
         String json = new String(body, StandardCharsets.UTF_8);
-        return JSONObject.parseObject(json, Request.class);
+        // Class反序列化问题
+        return JSONObject.parseObject(json, Request.class, JSONReader.Feature.SupportClassForName);
     }
 
     public Response deSerializeResponse(byte[] body) {

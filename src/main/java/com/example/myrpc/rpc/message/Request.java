@@ -15,7 +15,7 @@ public class Request {
     /**
      * 参数类型
      */
-    private String[] paramTypes;
+    private Class<?>[] paramTypes;
     /**
      * 参数
      */
