@@ -2,6 +2,7 @@ package com.example.myrpc.rpc.consumer;
 
 import com.example.myrpc.rpc.api.IAdd;
 import com.example.myrpc.rpc.codec.MessageDecoder;
+import com.example.myrpc.rpc.exception.RpcException;
 import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.codec.RequestMessageEncoder;
 import com.example.myrpc.rpc.message.Response;
@@ -15,6 +16,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 public class Consumer implements IAdd {
 
@@ -36,8 +38,12 @@ public class Consumer implements IAdd {
                                     @Override
                                     protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) throws Exception {
                                         // 接收响应
-                                        Integer result = Integer.valueOf(String.valueOf(response.getResult()));
-                                        resultFuture.complete(result);
+                                        if (Response.isSuccess(response)) {
+                                            Integer result = Integer.valueOf(String.valueOf(response.getResult()));
+                                            resultFuture.complete(result);
+                                        } else {
+                                            resultFuture.completeExceptionally((new RpcException(response.getMsg())));
+                                        }
                                     }
                                 });
                     }
@@ -47,20 +53,21 @@ public class Consumer implements IAdd {
         ChannelFuture syncFuture = null;
         try {
             syncFuture = bootstrap.connect("localhost", 9999).sync();
-        } catch (InterruptedException e) {
+            // 发起请求
+            Request request = new Request();
+            request.setServiceName(IAdd.class.getName());
+            request.setMethodName("add");
+            request.setParamTypes(new Class[]{int.class, int.class});
+            request.setParams(new Object[]{a, b});
+            syncFuture.channel().writeAndFlush(request);
+            // 等待获取Provider结果
+            // 超时5s
+            Integer result = resultFuture.get(5, TimeUnit.SECONDS);
+            System.out.println("成功获取Provider结果：" + result);
+            return result;
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        // 发起请求
-        Request request = new Request();
-        request.setServiceName(IAdd.class.getName());
-        request.setMethodName("add");
-        request.setParamTypes(new Class[]{int.class, int.class});
-        request.setParams(new Object[]{a, b});
-        syncFuture.channel().writeAndFlush(request);
-        // 等待获取Provider结果
-        Integer result = resultFuture.join();
-        System.out.println("成功获取Provider结果：" + result);
-        return result;
     }
 
 
