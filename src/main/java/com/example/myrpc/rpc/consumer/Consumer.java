@@ -7,24 +7,25 @@ import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.codec.RequestMessageEncoder;
 import com.example.myrpc.rpc.message.Response;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public class Consumer implements IAdd {
+    /**
+     * 异步响应（在途请求）的标准处理，<requestId, 异步响应>
+     */
+    private final Map<Integer, CompletableFuture<?>> inFightRequestTable = new ConcurrentHashMap<>();
 
-    @Override
-    public int add(int a, int b) {
-        // 异步容器，放provider的返回值
-        CompletableFuture<Integer> resultFuture = new CompletableFuture<>();
+    private final ConnectionManager connectionManager = new ConnectionManager(createBootstrap());
 
+    private Bootstrap createBootstrap() {
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(new NioEventLoopGroup())
                 .channel(NioSocketChannel.class)
@@ -37,29 +38,47 @@ public class Consumer implements IAdd {
                                 .addLast(new SimpleChannelInboundHandler<Response>() {
                                     @Override
                                     protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) throws Exception {
+                                        CompletableFuture completableFuture = inFightRequestTable.remove(response.getRequestId());
                                         // 接收响应
                                         if (Response.isSuccess(response)) {
                                             Integer result = Integer.valueOf(String.valueOf(response.getResult()));
-                                            resultFuture.complete(result);
+                                            completableFuture.complete(result);
                                         } else {
-                                            resultFuture.completeExceptionally((new RpcException(response.getMsg())));
+                                            completableFuture.completeExceptionally((new RpcException(response.getMsg())));
                                         }
                                     }
                                 });
                     }
                 });
+        return bootstrap;
+    }
+
+
+    @Override
+    public int add(int a, int b) {
+        // 异步容器，放provider的返回值
+        CompletableFuture<Integer> resultFuture = new CompletableFuture<>();
 
         // 连接Provider
-        ChannelFuture syncFuture = null;
         try {
-            syncFuture = bootstrap.connect("localhost", 9999).sync();
+            Channel channel = connectionManager.getChannel("localhost", 9999);
+            if (channel == null) {
+                throw new RpcException("建立连接失败");
+            }
             // 发起请求
             Request request = new Request();
             request.setServiceName(IAdd.class.getName());
             request.setMethodName("add");
             request.setParamTypes(new Class[]{int.class, int.class});
             request.setParams(new Object[]{a, b});
-            syncFuture.channel().writeAndFlush(request);
+
+            channel.writeAndFlush(request).addListener((future) -> {
+                if (future.isSuccess()) {
+                    // 发送请求成功，则缓存异步响应
+                    inFightRequestTable.put(request.getRequestId(), resultFuture);
+                }
+            });
+
             // 等待获取Provider结果
             // 超时5s
             Integer result = resultFuture.get(5, TimeUnit.SECONDS);

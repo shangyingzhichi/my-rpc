@@ -69,17 +69,17 @@ public class ProviderServer {
             ServiceRegistry.ServiceInstanceWrapper service = serviceRegistry.findService(request.getServiceName());
             if (service == null) {
                 log.info("find service by name error: {}", request.getServiceName());
-                response = Response.fail(Response.ERROR, String.format("service not found: %s", request.getServiceName()));
+                response = Response.fail(request.getRequestId(), Response.ERROR, String.format("service not found: %s", request.getServiceName()));
                 channelHandlerContext.writeAndFlush(response);
             }
             try {
                 // 2. 调用方法
                 Object result = service.invoke(request.getMethodName(), request.getParamTypes(), request.getParams());
                 log.info("调用服务【{}】的方法【{}】成功，结果为：【{}】", request.getServiceName(), request.getMethodName(), result);
-                channelHandlerContext.writeAndFlush(Response.success(result));
+                channelHandlerContext.writeAndFlush(Response.success(request.getRequestId(), result));
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
-                channelHandlerContext.writeAndFlush(Response.fail(Response.ERROR, e.getMessage()));
+                channelHandlerContext.writeAndFlush(Response.fail(request.getRequestId(), Response.ERROR, e.getMessage()));
             }
         }
 
