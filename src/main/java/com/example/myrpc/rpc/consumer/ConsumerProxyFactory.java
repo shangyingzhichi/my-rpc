@@ -4,6 +4,8 @@ import com.example.myrpc.rpc.api.IAdd;
 import com.example.myrpc.rpc.codec.MessageDecoder;
 import com.example.myrpc.rpc.codec.RequestMessageEncoder;
 import com.example.myrpc.rpc.exception.RpcException;
+import com.example.myrpc.rpc.loadbalance.LoadBalanceFactory;
+import com.example.myrpc.rpc.loadbalance.LoadBalancer;
 import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.message.Response;
 import com.example.myrpc.rpc.registry.*;
@@ -36,6 +38,8 @@ public class ConsumerProxyFactory {
     private final ServiceRegistry serviceRegistry;
     // consumer配置
     private final ConsumerProperties consumerProperties;
+    // 负载均衡器
+    private final LoadBalancer loadBalancer;
 
     public ConsumerProxyFactory(ConsumerProperties consumerProperties) {
         this.consumerProperties = consumerProperties;
@@ -48,6 +52,8 @@ public class ConsumerProxyFactory {
         // 注册中心
         this.serviceRegistry = new DefaultRegistry(consumerProperties.getRegistryConfig());
         serviceRegistry.init();
+        // 负载均衡器
+        loadBalancer = LoadBalanceFactory.create(consumerProperties.getLoadBalanceType());
     }
 
     private Bootstrap createBootstrap() {
@@ -134,7 +140,8 @@ public class ConsumerProxyFactory {
                 if (serviceMetaDataList == null || serviceMetaDataList.isEmpty()) {
                     throw new RpcException(String.format("service【%s】对应的provider为空", clazz.getName()));
                 }
-                ServiceMetaData serviceMetaData = serviceMetaDataList.get(0);
+                // 负载均衡
+                ServiceMetaData serviceMetaData = loadBalancer.choose(serviceMetaDataList);
                 // 根据连接地址获取连接
                 Channel channel = connectionManager.getChannel(serviceMetaData.getHost(), serviceMetaData.getPort());
                 if (channel == null) {

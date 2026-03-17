@@ -1,6 +1,7 @@
 package com.example.myrpc.rpc.consumer;
 
 import com.example.myrpc.rpc.api.IAdd;
+import com.example.myrpc.rpc.loadbalance.LoadBalanceType;
 import com.example.myrpc.rpc.registry.RegistryConfig;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,6 +15,8 @@ public class ConsumerApp {
 
         ConsumerProperties consumerProperties = new ConsumerProperties();
         consumerProperties.setRegistryConfig(registryConfig);
+
+        consumerProperties.setLoadBalanceType(LoadBalanceType.ROUND_ROBIN);
 
 
         ConsumerProxyFactory proxyFactory = new ConsumerProxyFactory(consumerProperties);
