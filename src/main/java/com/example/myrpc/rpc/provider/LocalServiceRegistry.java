@@ -1,15 +1,17 @@
 package com.example.myrpc.rpc.provider;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 注册表
  */
-public class ServiceRegistry {
+public class LocalServiceRegistry {
 
-    private Map<String, ServiceInstanceWrapper> serviceMap = new ConcurrentHashMap<>();
+    private final Map<String, ServiceInstanceWrapper> serviceMap = new ConcurrentHashMap<>();
 
     public <I> void register(Class<I> interfaceClazz, I instance) {
         if (!interfaceClazz.isInterface()) {
@@ -43,5 +45,9 @@ public class ServiceRegistry {
             Method method = interfaceClazz.getMethod(methodName, paramTypes);
             return method.invoke(instance, params);
         }
+    }
+
+    public List<String> getAllServices() {
+        return new ArrayList<>(serviceMap.keySet());
     }
 }

@@ -6,6 +6,7 @@ import com.example.myrpc.rpc.codec.RequestMessageEncoder;
 import com.example.myrpc.rpc.exception.RpcException;
 import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.message.Response;
+import com.example.myrpc.rpc.registry.*;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,6 +39,16 @@ public class ConsumerProxyFactory {
      * 连接管理器
      */
     private final ConnectionManager connectionManager = new ConnectionManager(createBootstrap());
+
+    /**
+     * 注册中心
+     */
+    private final ServiceRegistry serviceRegistry;
+
+    public ConsumerProxyFactory(RegistryConfig registryConfig) {
+        this.serviceRegistry = new DefaultRegistry(registryConfig);
+        serviceRegistry.init();
+    }
 
     private Bootstrap createBootstrap() {
         Bootstrap bootstrap = new Bootstrap();
@@ -71,13 +83,17 @@ public class ConsumerProxyFactory {
     public <I> I createProxy(Class<I> interfaceClass) {
         Object proxyInstance = Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
                 new Class[]{interfaceClass},
-                new ConsumerInvocationHandler()
+                new ConsumerInvocationHandler<>(interfaceClass)
         );
         return (I) proxyInstance;
     }
 
 
-    public class ConsumerInvocationHandler implements InvocationHandler {
+    public class ConsumerInvocationHandler<I> implements InvocationHandler {
+        private final Class<I> clazz;
+        public  ConsumerInvocationHandler(Class<I> clazz) {
+            this.clazz = clazz;
+        }
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -99,21 +115,28 @@ public class ConsumerProxyFactory {
 
             // 连接Provider
             try {
-                Channel channel = connectionManager.getChannel("localhost", 9999);
+                List<ServiceMetaData> serviceMetaDataList = serviceRegistry.fetchService(clazz.getName());
+                if (serviceMetaDataList == null || serviceMetaDataList.isEmpty()) {
+                    throw new RpcException(String.format("service【%s】对应的provider为空", clazz.getName()));
+                }
+                ServiceMetaData serviceMetaData = serviceMetaDataList.get(0);
+                Channel channel = connectionManager.getChannel(serviceMetaData.getHost(), serviceMetaData.getPort());
                 if (channel == null) {
                     throw new RpcException("建立连接失败");
                 }
                 // 发起请求
                 Request request = new Request();
-                request.setServiceName(method.getDeclaringClass().getName());
+                request.setServiceName(clazz.getName());
                 request.setMethodName(method.getName());
                 request.setParamTypes(method.getParameterTypes());
                 request.setParams(args);
+                // 先放到在途请求中，防止通信过快，无法找到response
+                inFightRequestTable.put(request.getRequestId(), resultFuture);
 
                 channel.writeAndFlush(request).addListener((future) -> {
-                    if (future.isSuccess()) {
-                        // 发送请求成功，则缓存异步响应
-                        inFightRequestTable.put(request.getRequestId(), resultFuture);
+                    if (!future.isSuccess()) {
+                        inFightRequestTable.remove(request.getRequestId());
+                        resultFuture.completeExceptionally(future.cause());
                     }
                 });
 
@@ -129,6 +152,7 @@ public class ConsumerProxyFactory {
                     throw new RpcException(response.getMsg());
                 }
             } catch (Exception e) {
+                log.error(e.getMessage(), e);
                 throw new RuntimeException(e);
             }
         }

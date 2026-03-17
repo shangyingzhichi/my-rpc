@@ -33,22 +33,28 @@ public class MessageDecoder extends LengthFieldBasedFrameDecoder {
     protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         // 一帧数据
         ByteBuf frame = (ByteBuf) super.decode(ctx, in);
-        // frame -> Message(Request/Response)
-        byte[] magic = new byte[Message.MAGIC_BYTES.length];
-        frame.readBytes(magic);
-        if (!Arrays.equals(magic, Message.MAGIC_BYTES)) {
-            throw new RuntimeException("Invalid magic bytes");
-        }
-        byte messageType = frame.readByte();
-        byte[] body = new byte[frame.readableBytes()];
-        frame.readBytes(body);
-        // 反序列化消息内容
-        if(Objects.equals(Message.MessageType.REQUEST.code, messageType)){
-            return deSerializeRequest(body);
-        } else if (Objects.equals(Message.MessageType.RESPONSE.code, messageType)) {
-            return deSerializeResponse(body);
-        } else {
-            throw new RuntimeException("Invalid message type" + messageType);
+        try {
+            // frame -> Message(Request/Response)
+            byte[] magic = new byte[Message.MAGIC_BYTES.length];
+            frame.readBytes(magic);
+            if (!Arrays.equals(magic, Message.MAGIC_BYTES)) {
+                throw new RuntimeException("Invalid magic bytes");
+            }
+            byte messageType = frame.readByte();
+            byte[] body = new byte[frame.readableBytes()];
+            frame.readBytes(body);
+            // 反序列化消息内容
+            if(Objects.equals(Message.MessageType.REQUEST.code, messageType)){
+                return deSerializeRequest(body);
+            } else if (Objects.equals(Message.MessageType.RESPONSE.code, messageType)) {
+                return deSerializeResponse(body);
+            } else {
+                throw new RuntimeException("Invalid message type" + messageType);
+            }
+        } finally {
+            // 必须手动释放（内存泄露）
+            // TODO 记录该易错点
+            frame.release();
         }
 
 

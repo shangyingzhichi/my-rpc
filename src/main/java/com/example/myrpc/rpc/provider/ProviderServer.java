@@ -4,6 +4,7 @@ import com.example.myrpc.rpc.codec.MessageDecoder;
 import com.example.myrpc.rpc.message.Request;
 import com.example.myrpc.rpc.message.Response;
 import com.example.myrpc.rpc.codec.ResponseMessageEncoder;
+import com.example.myrpc.rpc.registry.*;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -15,20 +16,43 @@ import lombok.extern.slf4j.Slf4j;
 public class ProviderServer {
 
     private final int port;
-
-    private final ServiceRegistry serviceRegistry;
-
+    private final String host;
+    // 本地注册表
+    private final LocalServiceRegistry localServiceRegistry;
+    // EventLoop线程组
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
+    // 注册中心
+    private final ServiceRegistry serviceRegistry;
 
 
-    public ProviderServer(int port) {
+    public ProviderServer(String host, int port, RegistryConfig registryConfig) {
+        this.host = host;
         this.port = port;
-        serviceRegistry = new ServiceRegistry();
+        localServiceRegistry = new LocalServiceRegistry();
+        serviceRegistry = new DefaultRegistry(registryConfig);
     }
 
-    public <I> void registerService(Class<I> interfaceClass, I instance) {
-        serviceRegistry.register(interfaceClass, instance);
+    /**
+     * 向本地注册表注册服务
+     */
+    public <I> void registerServiceLocal(Class<I> interfaceClass, I instance) {
+        localServiceRegistry.register(interfaceClass, instance);
+    }
+
+    /**
+     * 将本地注册表的所有服务，注册到注册中心
+     */
+    public void registerLocalToRegistry() {
+        log.info("Registering local service registry");
+        localServiceRegistry.getAllServices().forEach(service -> {
+            ServiceMetaData serviceMetaData = new ServiceMetaData();
+            serviceMetaData.setServiceName(service);
+            serviceMetaData.setHost(host);
+            serviceMetaData.setPort(port);
+            serviceRegistry.registerService(serviceMetaData);
+        });
+        log.info("Register local service registry completed");
     }
 
 
@@ -37,6 +61,9 @@ public class ProviderServer {
         workerGroup = new NioEventLoopGroup(4);
 
         try {
+            // 注册中心初始化
+            serviceRegistry.init();
+            // 初始化ServerBootstrap
             ServerBootstrap serverBootstrap = new ServerBootstrap();
             serverBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
@@ -52,6 +79,8 @@ public class ProviderServer {
             // 绑定端口，并同步等待
             ChannelFuture syncFuture = serverBootstrap.bind(port).sync();
             System.out.println("Provider启动成功");
+            // 将服务注册到注册中心
+            registerLocalToRegistry();
         } catch (Exception e) {
             throw new RuntimeException("Provider启动异常", e);
         }
@@ -66,7 +95,7 @@ public class ProviderServer {
             Response response;
 
             // 1. 获取服务
-            ServiceRegistry.ServiceInstanceWrapper service = serviceRegistry.findService(request.getServiceName());
+            LocalServiceRegistry.ServiceInstanceWrapper service = localServiceRegistry.findService(request.getServiceName());
             if (service == null) {
                 log.info("find service by name error: {}", request.getServiceName());
                 response = Response.fail(request.getRequestId(), Response.ERROR, String.format("service not found: %s", request.getServiceName()));

@@ -44,6 +44,12 @@
             <artifactId>logback-classic</artifactId>
             <version>1.5.32</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-x-discovery</artifactId>
+            <version>4.2.0</version>
+        </dependency>
     </dependencies>
 
 
