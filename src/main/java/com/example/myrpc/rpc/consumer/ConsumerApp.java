@@ -11,7 +11,12 @@ public class ConsumerApp {
         RegistryConfig registryConfig = new RegistryConfig();
         registryConfig.setConnectString("127.0.0.1:2181");
         registryConfig.setRegistryType(RegistryConfig.RegistryType.ZOOKEEPER);
-        ConsumerProxyFactory proxyFactory = new ConsumerProxyFactory(registryConfig);
+
+        ConsumerProperties consumerProperties = new ConsumerProperties();
+        consumerProperties.setRegistryConfig(registryConfig);
+
+
+        ConsumerProxyFactory proxyFactory = new ConsumerProxyFactory(consumerProperties);
 
         IAdd proxy = proxyFactory.createProxy(IAdd.class);
         while(true) {

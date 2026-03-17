@@ -33,6 +33,9 @@ public class MessageDecoder extends LengthFieldBasedFrameDecoder {
     protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         // 一帧数据
         ByteBuf frame = (ByteBuf) super.decode(ctx, in);
+        if (frame == null) {
+            return null;
+        }
         try {
             // frame -> Message(Request/Response)
             byte[] magic = new byte[Message.MAGIC_BYTES.length];
@@ -52,7 +55,7 @@ public class MessageDecoder extends LengthFieldBasedFrameDecoder {
                 throw new RuntimeException("Invalid message type" + messageType);
             }
         } finally {
-            // 必须手动释放（内存泄露）
+            // 引用计数减一（必须手动释放，防止内存泄露）
             // TODO 记录该易错点
             frame.release();
         }

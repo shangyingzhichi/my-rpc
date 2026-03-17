@@ -15,22 +15,22 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ProviderServer {
 
-    private final int port;
-    private final String host;
     // 本地注册表
     private final LocalServiceRegistry localServiceRegistry;
+    // provider配置信息
+    private final ProviderProperties providerProperties;
+    // 注册中心
+    private final ServiceRegistry serviceRegistry;
     // EventLoop线程组
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
-    // 注册中心
-    private final ServiceRegistry serviceRegistry;
 
 
-    public ProviderServer(String host, int port, RegistryConfig registryConfig) {
-        this.host = host;
-        this.port = port;
+
+    public ProviderServer(ProviderProperties providerProperties) {
+        this.providerProperties = providerProperties;
         localServiceRegistry = new LocalServiceRegistry();
-        serviceRegistry = new DefaultRegistry(registryConfig);
+        serviceRegistry = new DefaultRegistry(providerProperties.getRegistryConfig());
     }
 
     /**
@@ -48,8 +48,8 @@ public class ProviderServer {
         localServiceRegistry.getAllServices().forEach(service -> {
             ServiceMetaData serviceMetaData = new ServiceMetaData();
             serviceMetaData.setServiceName(service);
-            serviceMetaData.setHost(host);
-            serviceMetaData.setPort(port);
+            serviceMetaData.setHost(providerProperties.getHost());
+            serviceMetaData.setPort(providerProperties.getPort());
             serviceRegistry.registerService(serviceMetaData);
         });
         log.info("Register local service registry completed");
@@ -57,8 +57,8 @@ public class ProviderServer {
 
 
     public void start() {
-        bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup(4);
+        bossGroup = new NioEventLoopGroup();
+        workerGroup = new NioEventLoopGroup(providerProperties.getWorkerThreadNum());
 
         try {
             // 注册中心初始化
@@ -77,7 +77,7 @@ public class ProviderServer {
                         }
                     });
             // 绑定端口，并同步等待
-            ChannelFuture syncFuture = serverBootstrap.bind(port).sync();
+            ChannelFuture syncFuture = serverBootstrap.bind(providerProperties.getHost(), providerProperties.getPort()).sync();
             System.out.println("Provider启动成功");
             // 将服务注册到注册中心
             registerLocalToRegistry();

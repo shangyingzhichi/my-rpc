@@ -10,7 +10,13 @@ public class ProviderApp {
         registryConfig.setConnectString("127.0.0.1:2181");
         registryConfig.setRegistryType(RegistryConfig.RegistryType.ZOOKEEPER);
 
-        ProviderServer providerServer = new ProviderServer("127.0.0.1", 9998, registryConfig);
+        ProviderProperties providerProperties = new ProviderProperties();
+        providerProperties.setRegistryConfig(registryConfig);
+        providerProperties.setHost("127.0.0.1");
+        providerProperties.setPort(9999);
+
+
+        ProviderServer providerServer = new ProviderServer(providerProperties);
         providerServer.registerServiceLocal(IAdd.class, new AddImpl() );
         providerServer.start();
     }
